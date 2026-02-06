@@ -1,36 +1,36 @@
-# # String Manipulation
-# '''
-# Strings are a bunch of characters strung togerther.
-# Operations on strings are different than operations on numbers (int / float)
-# '''
-# print(5+7)
-# print("5"+"7") # "+" overloaded to concatenation instead of addition
-# print("Butter" + "fly")
-# print(5*"abc") # You can also overload the "*" operator
+# String Manipulation
+'''
+Strings are a bunch of characters strung togerther.
+Operations on strings are different than operations on numbers (int / float)
+'''
+print(5+7)
+print("5"+"7") # "+" overloaded to concatenation instead of addition
+print("Butter" + "fly")
+print(5*"abc") # You can also overload the "*" operator
 
-# # Escape characters
-# '''
-# \n - new line
-# \t - tab
-# \\ - the character \
-# \' - the character '
-# \" - the character "
-# '''
+# Escape characters
+'''
+\n - new line
+\t - tab
+\\ - the character \
+\' - the character '
+\" - the character "
+'''
 
-# print("Today\nis\nThursday\nFeb\n5")
+print("Today\nis\nThursday\nFeb\n5")
 
-# # You can also use \t to make a table
-# print(40*'=')
-# print("Name\t\tage\taverage")
-# print(40*'=')
-# print("John\t\t16\t87")
-# print(40*'=')
-# print("Katherine\t15\t87")
+# You can also use \t to make a table
+print(40*'=')
+print("Name\t\tage\taverage")
+print(40*'=')
+print("John\t\t16\t87")
+print(40*'=')
+print("Katherine\t15\t87")
 
-# # When using quotes, make sure that the quotes closing 
-# # the string is not used in the string itself
-# print("I'll be there")
-# print("That's mine")
+# When using quotes, make sure that the quotes closing 
+# the string is not used in the string itself
+print("I'll be there")
+print("That's mine")
 
 # String indexing
 # lists, string, arrays, etc is zero-indexed
@@ -77,11 +77,11 @@ print(school.count("nce"))
 #       NOT inplace
 print(school.replace("n", "x"))
 
-# 5.    .lower() lowercases the string
+# 5.    .lower() lowercases the string, NOT inplace
 print(school.lower())
 
-# 6.    .upper() uppercases the string
+# 6.    .upper() uppercases the string, NOT inplace
 print(school.upper())
 
-# 7.    .capitalize capitalizes the string
+# 7.    .capitalize capitalizes the string, NOT inplace
 print(school.capitalize())
