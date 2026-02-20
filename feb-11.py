@@ -73,4 +73,11 @@
 
 # 6.
 
-age = int(input("Enter your age"))
+age = int(input("Enter your age: "))
+days = int(input("Enter your days: "))
+credit = int(input("Enter your credit card or ID number >:) "))
+
+if age >= 18 and 0 < days <= 31:
+    print("Booking accepted")
+else:
+    print("Booking denied")
