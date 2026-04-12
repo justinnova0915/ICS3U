@@ -39,6 +39,7 @@ pygame.display.set_caption("MIKU PAINT")
 TEAL = (57, 197, 187)      
 PINK = (230, 57, 175)      
 DARK_GREY = (30, 30, 30)   
+HOVER_GREY = (80, 80, 80) # New color for Hover state
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 PRESETS = [BLACK, WHITE, (255,0,0), (0,255,0), (0,0,255), (255,255,0), TEAL, PINK]
@@ -110,39 +111,44 @@ def generate_color_wheel(radius):
 wheel_surf = generate_color_wheel(color_wheel_radius)
 
 # --- UI FUNCTIONS ---
-def draw_ui():
+def draw_ui(mx, my):
     screen.fill(DARK_GREY)
     
     # Title
     title_surf = font_title.render("MIKU PAINT", True, TEAL)
     screen.blit(title_surf, (20, 20))
 
-    # Save/Load
+    # Save/Load with Hover Highlighting
     save_btn_rect = pygame.Rect(WIDTH - 160, 25, 140, 40)
     load_btn_rect = pygame.Rect(WIDTH - 320, 25, 140, 40)
-    pygame.draw.rect(screen, PINK, save_btn_rect, border_radius=8)
-    pygame.draw.rect(screen, PINK, load_btn_rect, border_radius=8)
     
-    save_txt = font_ui.render("SAVE (S)", True, BLACK)
-    load_txt = font_ui.render("LOAD (L)", True, BLACK)
-    screen.blit(save_txt, (save_btn_rect.centerx - save_txt.get_width()//2, save_btn_rect.centery - save_txt.get_height()//2))
-    screen.blit(load_txt, (load_btn_rect.centerx - load_txt.get_width()//2, load_btn_rect.centery - load_txt.get_height()//2))
+    for r, txt in [(save_btn_rect, "SAVE (S)"), (load_btn_rect, "LOAD (L)")]:
+        # 3-State Highlighting (Selected state doesn't apply to file buttons, just Hover/Default)
+        color = (255, 150, 220) if r.collidepoint(mx, my) else PINK
+        pygame.draw.rect(screen, color, r, border_radius=8)
+        btn_txt = font_ui.render(txt, True, BLACK)
+        screen.blit(btn_txt, (r.centerx - btn_txt.get_width()//2, r.centery - btn_txt.get_height()//2))
 
     # Sidebar
     pygame.draw.rect(screen, (45, 45, 45), (10, 100, 170, 685), border_radius=15)
     
-    # Tool Buttons
+    # Tool Buttons with 3-State Highlighting (Default, Hover, Selected)
     tools_list = ["pencil", "brush", "eraser", "spray", "line", "rect", "oval"]
     for i, t in enumerate(tools_list):
         t_rect = pygame.Rect(25, 110 + (i * 35), 140, 30)
 
         if tool == t:
-            color = TEAL 
+            color = TEAL # Selected
+            txt_color = BLACK
+        elif t_rect.collidepoint(mx, my):
+            color = HOVER_GREY # Hover
+            txt_color = WHITE
         else:
-            color = (60, 60, 60)
+            color = (60, 60, 60) # Default
+            txt_color = WHITE
 
         pygame.draw.rect(screen, color, t_rect, border_radius=5)
-        txt = font_ui.render(t.upper(), True, BLACK if tool == t else WHITE)
+        txt = font_ui.render(t.upper(), True, txt_color)
         screen.blit(txt, (t_rect.centerx - txt.get_width()//2, t_rect.centery - txt.get_height()//2))
 
     # Thickness Control
@@ -150,10 +156,11 @@ def draw_ui():
     screen.blit(thick_label, (25, 360))
     plus_rect = pygame.Rect(115, 355, 25, 25)
     minus_rect = pygame.Rect(145, 355, 25, 25)
-    pygame.draw.rect(screen, (70, 70, 70), plus_rect, border_radius=3)
-    pygame.draw.rect(screen, (70, 70, 70), minus_rect, border_radius=3)
-    screen.blit(font_ui.render("+", True, WHITE), (121, 357))
-    screen.blit(font_ui.render("-", True, WHITE), (153, 357))
+    
+    for r, char in [(plus_rect, "+"), (minus_rect, "-")]:
+        color = HOVER_GREY if r.collidepoint(mx, my) else (70, 70, 70)
+        pygame.draw.rect(screen, color, r, border_radius=3)
+        screen.blit(font_ui.render(char, True, WHITE), (r.x + 6, r.y + 2))
 
     # Sidebar Preview Box
     preview_box = pygame.Rect(25, 390, 140, 70)
@@ -171,16 +178,19 @@ def draw_ui():
         if tool == "pencil": p_radius = 2
         pygame.draw.circle(screen, p_color, preview_box.center, p_radius)
 
-    # Stamps
+    # Stamps with 3-State Highlighting
     stamp_header = font_ui.render("STAMPS", True, PINK)
     screen.blit(stamp_header, (25, 470))
     for i in range(5):
         s_rect = pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40)
-        pygame.draw.rect(screen, (60, 60, 60), s_rect, border_radius=5)
+        
+        if tool == f"stamp_{i}": color = WHITE
+        elif s_rect.collidepoint(mx, my): color = HOVER_GREY
+        else: color = (60, 60, 60)
+        
+        pygame.draw.rect(screen, color, s_rect, border_radius=5)
         icon = pygame.transform.scale(master_stamps[i], (30, 30))
         screen.blit(icon, (s_rect.centerx - 15, s_rect.centery - 15))
-        if tool == f"stamp_{i}":
-            pygame.draw.rect(screen, WHITE, s_rect, 2, border_radius=5)
 
     # Color Palette (Presets)
     for i, c in enumerate(PRESETS):
@@ -228,6 +238,7 @@ def load_file():
     path = filedialog.askopenfilename(title="Load a Bitmap", filetypes=[("Image files", "*.png *.jpg *.bmp")])
     if path:
         img = pygame.image.load(path)
+        canvas_surf.fill(WHITE) # Rubric: Ensure only one picture is visible at a time
         img = pygame.transform.scale(img, (canvas_rect.width, canvas_rect.height))
         canvas_surf.blit(img, (0, 0))
 
@@ -303,8 +314,8 @@ while running:
                         for i, t in enumerate(tools_list):
                             if pygame.Rect(25, 110 + (i * 35), 140, 30).collidepoint(mx, my):
                                 tool = t
-                        if pygame.Rect(115, 355, 25, 25).collidepoint(mx, my): thickness = min(100, thickness + 2)
-                        if pygame.Rect(145, 355, 25, 25).collidepoint(mx, my): thickness = max(1, thickness - 2)
+                        if pygame.Rect(115, 355, 25, 25).collidepoint(mx, my): thickness = min(100, thickness + 1)
+                        if pygame.Rect(145, 355, 25, 25).collidepoint(mx, my): thickness = max(1, thickness - 1)
                         for i in range(5):
                             if pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40).collidepoint(mx, my):
                                 tool = f"stamp_{i}"
@@ -351,6 +362,20 @@ while running:
                             else: 
                                 pygame.draw.ellipse(canvas_surf, draw_color, r, thickness)
 
+        # --- UNIFIED KEYBOARD HANDLING (MOVED INSIDE EVENT LOOP) ---
+        if event.type == pygame.KEYDOWN:
+            mods = pygame.key.get_mods()
+            if (mods & pygame.KMOD_CTRL):
+                if event.key == pygame.K_z:
+                    if (mods & pygame.KMOD_SHIFT): perform_redo()
+                    else: perform_undo()
+                if event.key == pygame.K_s: save_file()
+                if event.key == pygame.K_l: load_file()
+                if event.key == pygame.K_f: filled = not filled
+            
+            if event.key == pygame.K_UP: thickness = min(100, thickness + 1)
+            if event.key == pygame.K_DOWN: thickness = max(1, thickness - 1)
+
     # Handle Draggable Slider
     if picking_color and dragging_slider:
         slider_rect = pygame.Rect(picker_rect.right - 40, picker_rect.y + 20, 20, 200)
@@ -359,7 +384,7 @@ while running:
         update_draw_color()
 
     # Rendering
-    draw_ui()
+    draw_ui(mx, my) # Passing mouse pos for hover effects
     screen.blit(canvas_surf, (canvas_rect.x, canvas_rect.y))
 
     if picking_color:
@@ -433,21 +458,8 @@ while running:
                     else: 
                         pygame.draw.ellipse(screen, draw_color, r, thickness)
 
-    # Undo/Redo/Shortcut Handling
-    if event.type == pygame.KEYDOWN:
-        mods = pygame.key.get_mods()
-        if (mods & pygame.KMOD_CTRL):
-            if event.key == pygame.K_z:
-                if (mods & pygame.KMOD_SHIFT): 
-                    perform_redo()
-                else: 
-                    perform_undo()
-            if event.key == pygame.K_s: save_file()
-            if event.key == pygame.K_l: load_file()
-            if event.key == pygame.K_f: filled = not filled
-        if event.key == pygame.K_UP: thickness = min(100, thickness + 1)
-        if event.key == pygame.K_DOWN: thickness = max(1, thickness - 1)
-
+    coord_txt = font_mono.render(f"Pos: {rel_mx}, {rel_my} | Tool: {tool} | Size: {thickness} | Ctrl+Z: Undo", True, WHITE)
+    screen.blit(coord_txt, (200, 740))
     pygame.display.flip()
 
 pygame.quit()
