@@ -81,6 +81,9 @@ font_ui = pygame.font.SysFont("Arial", 16, bold=True)
 font_small = pygame.font.SysFont("Arial", 14)
 font_mono = pygame.font.SysFont("Courier", 14)
 
+# Music init
+pygame.mixer.init()
+
 # --- ASSET GENERATION ---
 def create_stamps():
     stamps = []
@@ -455,12 +458,16 @@ while running:
     if mb[0] and canvas_rect.collidepoint(mx, my) and not picking_color:
         if tool == "pencil":
             pygame.draw.line(canvas_surf, draw_color, (rel_omx, rel_omy), (rel_mx, rel_my), 1)
-        elif tool == "brush":
-            pygame.draw.line(canvas_surf, draw_color, (rel_omx, rel_omy), (rel_mx, rel_my), thickness)
-            pygame.draw.circle(canvas_surf, draw_color, (rel_mx, rel_my), thickness // 2)
-        elif tool == "eraser":
-            pygame.draw.line(canvas_surf, WHITE, (rel_omx, rel_omy), (rel_mx, rel_my), thickness * 4)
-            pygame.draw.circle(canvas_surf, WHITE, (rel_mx, rel_my), (thickness * 4) // 2)
+        elif tool in ["brush", "eraser"]:
+            col = draw_color if tool == "brush" else WHITE
+            thick = thickness if tool == "brush" else thickness * 4
+            dx, dy = rel_mx - rel_omx, rel_my - rel_omy
+            dist = math.hypot(dx, dy)
+            if dist > 0:
+                px, py = -dy * (thick / 2) / dist, dx * (thick / 2) / dist
+                pts = [(rel_omx+px, rel_omy+py), (rel_omx-px, rel_omy-py), (rel_mx-px, rel_my-py), (rel_mx+px, rel_my+py)]
+                pygame.draw.polygon(canvas_surf, col, pts)
+            pygame.draw.circle(canvas_surf, col, (rel_mx, rel_my), thick // 2)
         elif tool == "spray":
             for _ in range(thickness // 2 + 5):
                 rx, ry = random.randint(-thickness, thickness), random.randint(-thickness, thickness)
@@ -498,17 +505,21 @@ while running:
     # --- ANIMATED CURSOR LOGIC (INJECTED AT END) ---
     pygame.mouse.set_visible(False)
     mode = "Normal"
-    if canvas_rect.collidepoint(mx, my): mode = "Handwriting"
-    elif (mx < 200 or my < 100 or my > 750 or mx > 1150): mode = "Link"
+    if canvas_rect.collidepoint(mx, my): 
+        mode = "Handwriting"
+    elif (mx < 200 or my < 100 or my > 750 or mx > 1150): 
+        mode = "Link"
     
     cur_timer += dt
     if cur_timer > cur_speed:
         cur_timer = 0
-        if cursor_dict[mode]: cur_frame = (cur_frame + 1) % len(cursor_dict[mode])
+        if cursor_dict[mode]: 
+            cur_frame = (cur_frame + 1) % len(cursor_dict[mode])
     
     if cursor_dict[mode]:
         screen.blit(cursor_dict[mode][cur_frame % len(cursor_dict[mode])], (mx, my))
-    else: pygame.draw.circle(screen, BLACK, (mx, my), 2)
+    else: 
+        pygame.draw.circle(screen, BLACK, (mx, my), 2)
 
     coord_txt = font_mono.render(f"Pos: {rel_mx}, {rel_my} | Tool: {tool} | Size: {thickness} | Ctrl+Z: Undo", True, WHITE)
     screen.blit(coord_txt, (200, 740))
