@@ -24,6 +24,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_BASE = os.path.join(BASE_DIR, "Assets", "Cursors")
 WALLPAPER_PATH = os.path.join(BASE_DIR, "Assets", "wallpaper.png")
 LOGO_PATH = os.path.join(BASE_DIR, "Assets", "logo.png")
+MUSIC_PATH = os.path.join(BASE_DIR, "Assets", "music.mp3")
 
 # --- INITIALIZATION ---
 pygame.init()
@@ -83,8 +84,11 @@ font_mono = pygame.font.SysFont("Courier", 14)
 
 # Music init
 pygame.mixer.init()
+pygame.mixer.music.load(MUSIC_PATH)
+pygame.mixer.music.set_volume(0.3)
+pygame.mixer.music.play(-1)
 
-# --- ASSET GENERATION ---
+# Load assets
 def create_stamps():
     stamps = []
     for path in STAMP_PATHS:
@@ -222,8 +226,12 @@ def draw_ui(mx, my):
         screen.blit(p_img, (preview_box.centerx - 20, preview_box.centery - 20))
     else:
         p_radius = max(2, min(30, thickness // 2))
-        p_color = WHITE if tool == "eraser" else draw_color
-        if tool == "pencil": p_radius = 2
+        if tool == "eraser":
+            p_color = WHITE 
+        else:
+            p_color = draw_color
+        if tool == "pencil": 
+            p_radius = 2
         pygame.draw.circle(screen, p_color, preview_box.center, p_radius)
 
     # Stamps with 3-State Highlighting
@@ -231,9 +239,12 @@ def draw_ui(mx, my):
     screen.blit(stamp_header, (25, 470))
     for i in range(5):
         s_rect = pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40)
-        if tool == f"stamp_{i}": color = WHITE
-        elif s_rect.collidepoint(mx, my): color = HOVER_GREY
-        else: color = (60, 60, 60)
+        if tool == f"stamp_{i}": 
+            color = WHITE
+        elif s_rect.collidepoint(mx, my): 
+            color = HOVER_GREY
+        else: 
+            color = (60, 60, 60)
         pygame.draw.rect(screen, color, s_rect, border_radius=8)
         icon = pygame.transform.scale(master_stamps[i], (32, 32))
         screen.blit(icon, (s_rect.centerx - 16, s_rect.centery - 16))
@@ -415,8 +426,10 @@ while running:
             mods = pygame.key.get_mods()
             if (mods & pygame.KMOD_CTRL):
                 if event.key == pygame.K_z:
-                    if (mods & pygame.KMOD_SHIFT): perform_redo()
-                    else: perform_undo()
+                    if (mods & pygame.KMOD_SHIFT): 
+                        perform_redo()
+                    else: 
+                        perform_undo()
                 if event.key == pygame.K_s: save_file()
                 if event.key == pygame.K_l: load_file()
                 if event.key == pygame.K_f: filled = not filled
