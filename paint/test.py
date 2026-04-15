@@ -83,6 +83,18 @@ value_slider = 1.0
 current_hue = 0.48
 current_sat = 0.71
 
+# Tool Hints for Dialogue Box
+TOOL_HINTS = {
+    "pencil": "Miku: Use the pencil for precise, thin lines!",
+    "brush": "Miku: The brush math makes everything super smooth! Up and down arrow to change size.",
+    "eraser": "Miku: Oops! Use this to clear up any mistakes. Up and down arrow to change size.",
+    "spray": "Miku: This spray is for a random spread! Up and down arrow to change size.",
+    "line": "Miku: Click and drag to make a perfectly straight line.",
+    "rect": "Miku: Drag to make a box! Ctrl+F toggles the fill.",
+    "oval": "Miku: Drag to make a circle! Ctrl+F toggles the fill.",
+    "stamp": "Miku: Click to place one of my special stamps! Up and down arrow to change size."
+}
+
 
 # Animated cursor init
 # Cursor has three states:
@@ -191,12 +203,13 @@ def load_visuals():
         mode_path = os.path.join(CURSOR_BASE, mode)
         
         # iterate through the subfolder
-        for filename in os.listdir(mode_path):
-            if filename.endswith(".png"):
-                # get the image from the file
-                cursor_img = pygame.image.load(os.path.join(mode_path, filename)).convert_alpha()
-                # shrink down to 44x44, and put into dict
-                cursor_dict[mode].append(pygame.transform.scale(cursor_img, (44, 44)))
+        if os.path.exists(mode_path):
+            for filename in os.listdir(mode_path):
+                if filename.endswith(".png"):
+                    # get the image from the file
+                    cursor_img = pygame.image.load(os.path.join(mode_path, filename)).convert_alpha()
+                    # shrink down to 44x44, and put into dict
+                    cursor_dict[mode].append(pygame.transform.scale(cursor_img, (44, 44)))
                 
     return wallpaper, logo
 
@@ -207,27 +220,24 @@ wallpaper, logo_img = load_visuals()
 # Generate the color picking color wheel
 def generate_color_wheel(radius):
     wheel = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
-    # iterate through all the possible points in the sequare containing the circle 
-    for x in range(radius * 2):
-        for y in range(radius * 2):
-
-            # calculate the distance of the point to the center
-            diff_x, diff_y = x - radius, y - radius
-            dist = (diff_x**2 + diff_y**2)**0.5
+    # ELEGANT TRIG APPROACH: Loop through radius and angle
+    for r in range(radius + 1):
+        # Determine steps needed for a solid circle at this radius
+        steps = int(2 * math.pi * r) + 1
+        for step in range(steps):
+            angle_rad = (step / steps) * (2 * math.pi)
             
-            # check if the point is in the circle
-            if dist <= radius:
-
-                # calculate the angle of the point relative to a reference vector pointing to the right
-                # python's angle_to generates angles in the range of -180 to 180
-                # so we add 360 to make everything positive, then mod 360 to keep it in range
-                angle = (pygame.math.Vector2(diff_x, diff_y).angle_to(pygame.math.Vector2(1, 0)) + 360) % 360
-                # normalize angle into hue
-                hue = angle / 360
-                # same to saturation
-                sat = dist / radius
-                r, g, b = colorsys.hsv_to_rgb(hue, sat, 1.0)
-                wheel.set_at((x, y), (int(r * 255), int(g * 255), int(b * 255), 255))
+            # Polar to Cartesian
+            x = int(radius + r * math.cos(angle_rad))
+            y = int(radius + r * math.sin(angle_rad))
+            
+            # Normalize for color math
+            hue = angle_rad / (2 * math.pi)
+            sat = r / radius
+            
+            rgb = colorsys.hsv_to_rgb(hue, sat, 1.0)
+            if 0 <= x < radius*2 and 0 <= y < radius*2:
+                wheel.set_at((x, y), (int(rgb[0]*255), int(rgb[1]*255), int(rgb[2]*255), 255))
     return wheel
 
 
@@ -246,19 +256,42 @@ def draw_ui(mouse_x, mouse_y):
     # draw the under rectangles of the UI stuff
     overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
     pygame.draw.rect(overlay, (20, 20, 20, 200), (10, 100, 170, 685), border_radius=15) 
-    pygame.draw.rect(overlay, (20, 20, 20, 160), (10, 10, 480, 80), border_radius=15) 
+    pygame.draw.rect(overlay, (20, 20, 20, 160), (10, 10, 520, 80), border_radius=15) # Extended for Dialogue
     pygame.draw.rect(overlay, (20, 20, 20, 160), (190, 755, 970, 40), border_radius=10) 
     screen.blit(overlay, (0, 0))
     
     # Logo and Title
     title_x_offset = 25
-    screen.blit(logo_img, (25, 25))
-    title_x_offset += logo_img.get_width() + 15
+    if logo_img:
+        screen.blit(logo_img, (25, 25))
+        title_x_offset += logo_img.get_width() + 15
     
     paint_txt = font_title.render("PAINT", True, TEAL)
     pro_txt = font_title.render(" PRO", True, PINK)
     screen.blit(paint_txt, (title_x_offset, 25))
     screen.blit(pro_txt, (title_x_offset + paint_txt.get_width(), 25))
+
+    dialogue_x = title_x_offset + paint_txt.get_width() + pro_txt.get_width() + 35
+    tool_key = tool.split("_")[0] if tool.startswith("stamp") else tool
+    hint_text = TOOL_HINTS.get(tool_key, "Miku: Let's draw something cute!")
+    
+    hint_surf = font_small.render(hint_text, True, DARK_GREY)
+    bubble_width = hint_surf.get_width() + 20
+    
+    # the little wedge
+    pygame.draw.polygon(screen, WHITE, [(dialogue_x - 10, 45), (dialogue_x, 35), (dialogue_x, 55)])
+    pygame.draw.rect(screen, WHITE, (dialogue_x, 25, bubble_width, 45), border_radius=10)
+    screen.blit(hint_surf, (dialogue_x + 10, 38))
+
+    # --- MUSIC PLAYER GUI ---
+    music_btn_rect = pygame.Rect(WIDTH - 160, 70, 140, 25)
+    music_bg_color = HOVER_GREY if music_btn_rect.collidepoint(mouse_x, mouse_y) else (60, 60, 60)
+    pygame.draw.rect(screen, music_bg_color, music_btn_rect, border_radius=6)
+    
+    music_label = "MUSIC: PLAYING" if playing else "MUSIC: PAUSED"
+    music_color = TEAL if playing else (150, 150, 150)
+    music_surf = font_small.render(music_label, True, music_color)
+    screen.blit(music_surf, (music_btn_rect.centerx - music_surf.get_width() // 2, music_btn_rect.centery - music_surf.get_height() // 2))
 
     # Save and load buttons
     save_btn_rect = pygame.Rect(WIDTH - 160, 25, 140, 40)
@@ -516,6 +549,14 @@ while running:
                         save_file()
                     if pygame.Rect(WIDTH - 320, 25, 140, 40).collidepoint(mouse_x, mouse_y): 
                         load_file()
+                        
+                    # music play/pause button
+                    if pygame.Rect(WIDTH - 160, 70, 140, 25).collidepoint(mouse_x, mouse_y):
+                        playing = not playing
+                        if playing:
+                            pygame.mixer.music.unpause()
+                        else:
+                            pygame.mixer.music.pause()
                     
                     # if we are not drawing on the canvas
                     if not canvas_rect.collidepoint(mouse_x, mouse_y):
@@ -672,7 +713,7 @@ while running:
         elif tool == "brush":
             pygame.draw.circle(screen, draw_color, (mouse_x, mouse_y), thickness // 2, 1)
         elif tool == "eraser":
-            pygame.draw.circle(screen, WHITE, (mouse_x, mouse_y), (thickness * 4) // 2, 1)
+            pygame.draw.circle(screen, WHITE, (mouse_x, mouse_y), (thickness * 1.5) // 2, 1)
         elif tool == "pencil":
             pygame.draw.circle(screen, draw_color, (mouse_x, mouse_y), 2, 1)
         elif tool in ["line", "rect", "oval", "spray"]:
@@ -762,18 +803,20 @@ while running:
 
     pygame.mouse.set_visible(False)
     current_mode = "Normal"
-    
+    # decide on the version of the cursor
     if canvas_rect.collidepoint(mouse_x, mouse_y): 
         current_mode = "Handwriting"
     elif (mouse_x < 200 or mouse_y < 100 or mouse_y > 750 or mouse_x > 1150): 
         current_mode = "Link"
     
+    # Check if its time to go to the next frame
     cursor_timer += delta_time
     if cursor_timer > cursor_speed:
         cursor_timer = 0
         if cursor_dict[current_mode]: 
             cursor_frame = (cursor_frame + 1) % len(cursor_dict[current_mode])
     
+    # Draws the image
     if cursor_dict[current_mode]:
         screen.blit(cursor_dict[current_mode][cursor_frame % len(cursor_dict[current_mode])], (mouse_x, mouse_y))
     else: 
