@@ -1,8 +1,9 @@
 """
-Program: Miku Paint Pro (Pygame Edition)
+Program: Miku Paint Pro
 Author: Justin Li
 """
 
+# Imports
 import pygame
 import random
 import os
@@ -10,7 +11,8 @@ import colorsys
 import math
 from tkinter import filedialog, Tk
 
-# --- SETTINGS & PATHS ---
+
+# Stamps Paths
 STAMP_PATHS = [
     r"./Assets/stamp0001.png",
     r"./Assets/stamp0011.png",
@@ -19,17 +21,16 @@ STAMP_PATHS = [
     r"./Assets/stamp0091.png"
 ]
 
-# Assets for visual overhaul
+# Assets
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CURSOR_BASE = os.path.join(BASE_DIR, "Assets", "Cursors")
 WALLPAPER_PATH = os.path.join(BASE_DIR, "Assets", "wallpaper.png")
 LOGO_PATH = os.path.join(BASE_DIR, "Assets", "logo.png")
 MUSIC_PATH = os.path.join(BASE_DIR, "Assets", "music.mp3")
 
-# --- INITIALIZATION ---
+# Inits
 pygame.init()
 pygame.font.init()
-
 
 root = Tk()
 root.withdraw()
@@ -39,27 +40,37 @@ WIDTH, HEIGHT = 1200, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("MIKU PAINT")
 
-# --- COLORS ---
+
+# Stock colors
 TEAL = (57, 197, 187)      
 PINK = (230, 57, 175)      
 DARK_GREY = (30, 30, 30)   
-HOVER_GREY = (80, 80, 80) # New color for Hover state
+HOVER_GREY = (80, 80, 80)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-PRESETS = [BLACK, WHITE, (255,0,0), (0,255,0), (0,0,255), (255,255,0), TEAL, PINK]
 
-# --- CANVAS SETUP ---
+PRESETS = [
+    BLACK, WHITE, (255, 0, 0), (0, 255, 0), 
+    (0, 0, 255), (255, 255, 0), TEAL, PINK
+]
+
+
+# Canvas inits
 canvas_rect = pygame.Rect(200, 100, 950, 650)
 canvas_surf = pygame.Surface((canvas_rect.width, canvas_rect.height))
 canvas_surf.fill(WHITE)
 
-# --- GLOBAL VARIABLES ---
+
+# State variables
 draw_color = TEAL
 thickness = 5  
 tool = "pencil"
 filled = False
+playing = True
+
 undo_list = []
 redo_list = []
+
 
 # Picker States
 picking_color = False
@@ -67,14 +78,21 @@ dragging_slider = False
 color_wheel_radius = 100
 picker_rect = pygame.Rect(WIDTH - 300, 390, 280, 350)
 value_slider = 1.0 
-current_hue = 0.48  # Default for Teal
-current_sat = 0.71  # Default for Teal
 
-# Cursor Animation State
+# The default is teal
+current_hue = 0.48
+current_sat = 0.71
+
+
+# Animated cursor init
+# Cursor has three states:
+# 1. Normal
+# 2. Handwriting for when on the canvas
+# 3. Link which is for hovering above buttons
 cursor_dict = {"Normal": [], "Handwriting": [], "Link": []}
-cur_frame = 0
-cur_timer = 0
-cur_speed = 100 # ms per frame
+cursor_frame = 0
+cursor_timer = 0
+cursor_speed = 100 # ms per frame
 
 # Fonts
 font_title = pygame.font.SysFont("Arial Black", 36)
@@ -82,180 +100,272 @@ font_ui = pygame.font.SysFont("Arial", 16, bold=True)
 font_small = pygame.font.SysFont("Arial", 14)
 font_mono = pygame.font.SysFont("Courier", 14)
 
-# Music init
-pygame.mixer.init()
-pygame.mixer.music.load(MUSIC_PATH)
-pygame.mixer.music.set_volume(0.3)
-pygame.mixer.music.play(-1)
 
-# Load assets
+print(f"""
+{'='*40}
+    Welcome to MIKU PAINT PRO!!!
+{'='*40}
+
+[ CONTROLS ]
+  - Left Click    : Draw / Use Tool / UI Interaction
+  - Ctrl + Z      : Undo
+  - Ctrl + Shift+Z: Redo
+  - Ctrl + S      : Save Canvas
+  - Ctrl + L      : Load Image to Canvas
+  - Ctrl + F      : Toggle Shape Fill (Rect/Oval)
+  - Up / Down     : Increase / Decrease Brush Size
+  - P             : Toggle Music Play/Pause
+
+[ TOOLS ]
+  - Pencil, Brush, Eraser, Spray
+  - Line, Rectangle, Oval
+  - Custom Stamps (Sidebar)
+
+{'='*40}
+Ready to create with Miku! What will you make this time?
+""")
+
+# Play music
+pygame.mixer.init()
+if os.path.exists(MUSIC_PATH):
+    pygame.mixer.music.load(MUSIC_PATH)
+    pygame.mixer.music.set_volume(0.3)
+    pygame.mixer.music.play(-1)
+
+
+# Helper functions ↓↓↓
+
+# Create stamps
 def create_stamps():
+    # Init a list to store the stamps
     stamps = []
     for path in STAMP_PATHS:
-        if os.path.exists(path):
-            try:
-                img = pygame.image.load(path).convert_alpha()
-                stamps.append(img)
-            except pygame.error:
-                s = pygame.Surface((100, 100), pygame.SRCALPHA)
-                pygame.draw.rect(s, PINK, (0, 0, 100, 100), 5)
-                stamps.append(s)
-        else:
-            s = pygame.Surface((100, 100), pygame.SRCALPHA)
-            pygame.draw.rect(s, PINK, (0, 0, 100, 100), 2)
-            txt = font_title.render("?", True, PINK)
-            s.blit(txt, (35, 25))
-            stamps.append(s)
+        # Convert surface to alpha so it can be transparent
+        img = pygame.image.load(path).convert_alpha()
+        stamps.append(img)
+    
     return stamps
 
+# process and create wallpaper and logo surfaces
 def load_visuals():
-    wp, lg = None, None
-    if os.path.exists(WALLPAPER_PATH):
-        try:
-            temp = pygame.image.load(WALLPAPER_PATH).convert()
-            w, h = temp.get_size()
-            ratio = w/h
-            if ratio > 1200/800:
-                nh = 800; nw = int(nh * ratio)
-            else:
-                nw = 1200; nh = int(nw / ratio)
-            temp = pygame.transform.smoothscale(temp, (nw, nh))
-            wp = temp.subsurface(((nw-1200)//2, (nh-800)//2, 1200, 800))
-        except: pass
-    if os.path.exists(LOGO_PATH):
-        try:
-            temp = pygame.image.load(LOGO_PATH).convert_alpha()
-            aspect = temp.get_width() / temp.get_height()
-            lg = pygame.transform.smoothscale(temp, (int(50 * aspect), 50))
-        except: pass
-    
-    for mode in cursor_dict.keys():
-        path = os.path.join(CURSOR_BASE, mode)
-        if os.path.exists(path):
-            files = sorted([f for f in os.listdir(path) if f.endswith(".png")])
-            for f in files:
-                img = pygame.image.load(os.path.join(path, f)).convert_alpha()
-                cursor_dict[mode].append(pygame.transform.scale(img, (44, 44)))
-    return wp, lg
 
+    # inits
+    wallpaper = None
+    logo = None
+
+    # load into surface
+    temp_wp = pygame.image.load(WALLPAPER_PATH).convert()
+    wp_w, wp_h = temp_wp.get_size()
+
+    # get aspect ratio
+    wp_ratio = wp_w / wp_h
+    
+    # if it is longer than the screen
+    if wp_ratio > 1200 / 800:
+        new_h = 800
+        # clamp
+        new_w = int(new_h * wp_ratio)
+    # if its wider than the screen
+    else:
+        new_w = 1200
+        # clamp
+        new_h = int(new_w / wp_ratio)
+    
+    # resizes the wallpaper to the window size
+    temp_wp = pygame.transform.smoothscale(temp_wp, (new_w, new_h))
+      
+    # we set the starting point so that we put the center of the image in the center of the window
+    # height and width subtracted by window divided by two essentially divided the extra space by 2, so half of the extra part gets left out on either side
+    wallpaper = temp_wp.subsurface(((new_w - 1200) // 2, (new_h - 800) // 2, 1200, 800))
+
+    # load logos
+    temp_logo = pygame.image.load(LOGO_PATH).convert_alpha()
+    logo_aspect = temp_logo.get_width() / temp_logo.get_height()
+    # clamps the logo height to 50, multiplies the aspect ratio with 50 to get the shrinked width
+    logo = pygame.transform.smoothscale(temp_logo, (int(50 * logo_aspect), 50))
+    
+    # load the cursor animation
+    # the cursor animation is made up of a series of png images
+    # first layer of for loop iterated through the subfolders under CURSOR_BASE, which is ./Assets/Cursors
+    for mode in cursor_dict.keys():
+        mode_path = os.path.join(CURSOR_BASE, mode)
+        
+        # iterate through the subfolder
+        for filename in os.listdir(mode_path):
+            if filename.endswith(".png"):
+                # get the image from the file
+                cursor_img = pygame.image.load(os.path.join(mode_path, filename)).convert_alpha()
+                # shrink down to 44x44, and put into dict
+                cursor_dict[mode].append(pygame.transform.scale(cursor_img, (44, 44)))
+                
+    return wallpaper, logo
+
+# call the functions
 master_stamps = create_stamps()
 wallpaper, logo_img = load_visuals()
 
+# Generate the color picking color wheel
 def generate_color_wheel(radius):
     wheel = pygame.Surface((radius * 2, radius * 2), pygame.SRCALPHA)
+    # iterate through all the possible points in the sequare containing the circle 
     for x in range(radius * 2):
         for y in range(radius * 2):
-            dx, dy = x - radius, y - radius
-            dist = (dx**2 + dy**2)**0.5
+
+            # calculate the distance of the point to the center
+            diff_x, diff_y = x - radius, y - radius
+            dist = (diff_x**2 + diff_y**2)**0.5
+            
+            # check if the point is in the circle
             if dist <= radius:
-                angle = (pygame.math.Vector2(dx, dy).angle_to(pygame.math.Vector2(1, 0)) + 360) % 360
+
+                # calculate the angle of the point relative to a reference vector pointing to the right
+                # python's angle_to generates angles in the range of -180 to 180
+                # so we add 360 to make everything positive, then mod 360 to keep it in range
+                angle = (pygame.math.Vector2(diff_x, diff_y).angle_to(pygame.math.Vector2(1, 0)) + 360) % 360
+                # normalize angle into hue
                 hue = angle / 360
+                # same to saturation
                 sat = dist / radius
                 r, g, b = colorsys.hsv_to_rgb(hue, sat, 1.0)
-                wheel.set_at((x, y), (int(r*255), int(g*255), int(b*255), 255))
+                wheel.set_at((x, y), (int(r * 255), int(g * 255), int(b * 255), 255))
     return wheel
+
 
 wheel_surf = generate_color_wheel(color_wheel_radius)
 
-# --- UI FUNCTIONS ---
-def draw_ui(mx, my):
-    if wallpaper: screen.blit(wallpaper, (0, 0))
-    else: screen.fill(DARK_GREY)
+
+# time for UI
+# this is where we draw all the UI
+def draw_ui(mouse_x, mouse_y):
+    # clear the entire screen
+    if wallpaper:
+        screen.blit(wallpaper, (0, 0))
+    else:
+        screen.fill(DARK_GREY)
     
-    # Frosted glass overlay
-    glass = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-    pygame.draw.rect(glass, (20, 20, 20, 200), (10, 100, 170, 685), border_radius=15) # Sidebar
-    pygame.draw.rect(glass, (20, 20, 20, 160), (10, 10, 480, 80), border_radius=15) # Header
-    pygame.draw.rect(glass, (20, 20, 20, 160), (190, 755, 970, 40), border_radius=10) # Palette
-    screen.blit(glass, (0, 0))
+    # draw the under rectangles of the UI stuff
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    pygame.draw.rect(overlay, (20, 20, 20, 200), (10, 100, 170, 685), border_radius=15) 
+    pygame.draw.rect(overlay, (20, 20, 20, 160), (10, 10, 480, 80), border_radius=15) 
+    pygame.draw.rect(overlay, (20, 20, 20, 160), (190, 755, 970, 40), border_radius=10) 
+    screen.blit(overlay, (0, 0))
     
     # Logo and Title
-    x_off = 25
-    if logo_img:
-        screen.blit(logo_img, (25, 25))
-        x_off += logo_img.get_width() + 15
+    title_x_offset = 25
+    screen.blit(logo_img, (25, 25))
+    title_x_offset += logo_img.get_width() + 15
     
     paint_txt = font_title.render("PAINT", True, TEAL)
     pro_txt = font_title.render(" PRO", True, PINK)
-    screen.blit(paint_txt, (x_off, 25))
-    screen.blit(pro_txt, (x_off + paint_txt.get_width(), 25))
+    screen.blit(paint_txt, (title_x_offset, 25))
+    screen.blit(pro_txt, (title_x_offset + paint_txt.get_width(), 25))
 
-    # Save/Load with Hover Highlighting
+    # Save and load buttons
     save_btn_rect = pygame.Rect(WIDTH - 160, 25, 140, 40)
     load_btn_rect = pygame.Rect(WIDTH - 320, 25, 140, 40)
     
-    for r, txt in [(save_btn_rect, "SAVE (S)"), (load_btn_rect, "LOAD (L)")]:
-        color = (255, 150, 220) if r.collidepoint(mx, my) else PINK
-        pygame.draw.rect(screen, color, r, border_radius=12)
-        pygame.draw.rect(screen, WHITE, r, 2, border_radius=12)
-        btn_txt = font_ui.render(txt, True, BLACK)
-        screen.blit(btn_txt, (r.centerx - btn_txt.get_width()//2, r.centery - btn_txt.get_height()//2))
+    for button_rect, label_text in [(save_btn_rect, "SAVE (S)"), (load_btn_rect, "LOAD (L)")]:
+        button_color = PINK
+        if button_rect.collidepoint(mouse_x, mouse_y):
+            button_color = (255, 150, 220)
+            
+        pygame.draw.rect(screen, button_color, button_rect, border_radius=12)
+        pygame.draw.rect(screen, WHITE, button_rect, 2, border_radius=12)
+        
+        btn_txt_surf = font_ui.render(label_text, True, BLACK)
+        screen.blit(btn_txt_surf, (button_rect.centerx - btn_txt_surf.get_width() // 2, button_rect.centery - btn_txt_surf.get_height() // 2))
 
-    # Tool Buttons with 3-State Highlighting
+    # Tool Buttons, iterate over each
     tools_list = ["pencil", "brush", "eraser", "spray", "line", "rect", "oval"]
-    for i, t in enumerate(tools_list):
-        t_rect = pygame.Rect(25, 110 + (i * 35), 140, 30)
-        if tool == t: color, txt_color = TEAL, BLACK
-        elif t_rect.collidepoint(mx, my): color, txt_color = HOVER_GREY, WHITE
-        else: color, txt_color = (60, 60, 60), WHITE
+    for i, tool_name in enumerate(tools_list):
+        tool_rect = pygame.Rect(25, 110 + (i * 35), 140, 30)
+        
+        btn_color = (60, 60, 60)
+        text_color = WHITE
+        
+        # If the current tool is this one
+        if tool == tool_name: 
+            btn_color = TEAL
+            text_color = BLACK
+        # If the mouse is hovering over this one
+        elif tool_rect.collidepoint(mouse_x, mouse_y): 
+            btn_color = HOVER_GREY
+            text_color = WHITE
 
-        pygame.draw.rect(screen, color, t_rect, border_radius=8)
-        if tool == t: pygame.draw.rect(screen, WHITE, t_rect, 2, border_radius=8)
-        txt = font_ui.render(t.upper(), True, txt_color)
-        screen.blit(txt, (t_rect.centerx - txt.get_width()//2, t_rect.centery - txt.get_height()//2))
 
-    # Thickness Control
-    thick_label = font_ui.render(f"SIZE: {thickness}", True, TEAL)
-    screen.blit(thick_label, (25, 360))
+        pygame.draw.rect(screen, btn_color, tool_rect, border_radius=8)
+        if tool == tool_name: 
+            pygame.draw.rect(screen, WHITE, tool_rect, 2, border_radius=8)
+            
+        tool_label = font_ui.render(tool_name.upper(), True, text_color)
+        screen.blit(tool_label, (tool_rect.centerx - tool_label.get_width() // 2, tool_rect.centery - tool_label.get_height() // 2))
+
+    # Thickness
+    thick_label_surf = font_ui.render(f"SIZE: {thickness}", True, TEAL)
+    screen.blit(thick_label_surf, (25, 360))
+    
     plus_rect = pygame.Rect(115, 355, 25, 25)
     minus_rect = pygame.Rect(145, 355, 25, 25)
-    for r, char in [(plus_rect, "+"), (minus_rect, "-")]:
-        color = HOVER_GREY if r.collidepoint(mx, my) else (70, 70, 70)
-        pygame.draw.rect(screen, color, r, border_radius=5)
-        screen.blit(font_ui.render(char, True, WHITE), (r.x + 6, r.y + 2))
+    
+    for control_rect, char in [(plus_rect, "+"), (minus_rect, "-")]:
+        control_color = (70, 70, 70)
+        if control_rect.collidepoint(mouse_x, mouse_y):
+            control_color = HOVER_GREY
+            
+        pygame.draw.rect(screen, control_color, control_rect, border_radius=5)
+        screen.blit(font_ui.render(char, True, WHITE), (control_rect.x + 6, control_rect.y + 2))
 
     # Sidebar Preview Box
     preview_box = pygame.Rect(25, 390, 140, 70)
+    # Preview box background
     pygame.draw.rect(screen, (10, 10, 10), preview_box, border_radius=10)
-    pygame.draw.rect(screen, TEAL if tool != "eraser" else PINK, preview_box, 2, border_radius=10)
     
-    if tool.startswith("stamp_"):
-        idx = int(tool.split("_")[1])
-        p_size = 40
-        p_img = pygame.transform.scale(master_stamps[idx], (int(p_size), int(p_size)))
-        screen.blit(p_img, (preview_box.centerx - 20, preview_box.centery - 20))
-    else:
-        p_radius = max(2, min(30, thickness // 2))
-        if tool == "eraser":
-            p_color = WHITE 
-        else:
-            p_color = draw_color
-        if tool == "pencil": 
-            p_radius = 2
-        pygame.draw.circle(screen, p_color, preview_box.center, p_radius)
+    border_col = TEAL
+    if tool == "eraser":
+        border_col = PINK
 
-    # Stamps with 3-State Highlighting
+    # Border
+    pygame.draw.rect(screen, border_col, preview_box, 2, border_radius=10)
+    
+    # the preview
+    if tool.startswith("stamp_"):
+        stamp_idx = int(tool.split("_")[1])
+        preview_stamp_img = pygame.transform.scale(master_stamps[stamp_idx], (40, 40))
+        screen.blit(preview_stamp_img, (preview_box.centerx - 20, preview_box.centery - 20))
+    else:
+        prev_radius = max(2, min(30, thickness // 2))
+        prev_color = draw_color
+        if tool == "eraser":
+            prev_color = WHITE 
+        if tool == "pencil": 
+            prev_radius = 2
+        pygame.draw.circle(screen, prev_color, preview_box.center, prev_radius)
+
+    # Stamps (same logic as buttons)
     stamp_header = font_ui.render("STAMPS", True, PINK)
     screen.blit(stamp_header, (25, 470))
+    
     for i in range(5):
-        s_rect = pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40)
+        stamp_btn_rect = pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40)
+        
+        stamp_bg_color = (60, 60, 60)
         if tool == f"stamp_{i}": 
-            color = WHITE
-        elif s_rect.collidepoint(mx, my): 
-            color = HOVER_GREY
-        else: 
-            color = (60, 60, 60)
-        pygame.draw.rect(screen, color, s_rect, border_radius=8)
-        icon = pygame.transform.scale(master_stamps[i], (32, 32))
-        screen.blit(icon, (s_rect.centerx - 16, s_rect.centery - 16))
+            stamp_bg_color = WHITE
+        elif stamp_btn_rect.collidepoint(mouse_x, mouse_y): 
+            stamp_bg_color = HOVER_GREY
+            
+        pygame.draw.rect(screen, stamp_bg_color, stamp_btn_rect, border_radius=8)
+        stamp_icon = pygame.transform.scale(master_stamps[i], (32, 32))
+        screen.blit(stamp_icon, (stamp_btn_rect.centerx - 16, stamp_btn_rect.centery - 16))
 
-    # Color Palette (Presets)
-    for i, c in enumerate(PRESETS):
-        c_rect = pygame.Rect(200 + (i * 45), 760, 40, 30)
-        pygame.draw.rect(screen, c, c_rect, border_radius=5)
-        if draw_color == c: pygame.draw.rect(screen, WHITE, c_rect, 3, border_radius=5)
+    # Color presets
+    for i, preset_color in enumerate(PRESETS):
+        preset_rect = pygame.Rect(200 + (i * 45), 760, 40, 30)
+        pygame.draw.rect(screen, preset_color, preset_rect, border_radius=5)
+        if draw_color == preset_color: 
+            pygame.draw.rect(screen, WHITE, preset_rect, 3, border_radius=5)
 
-    # Current Color Preview Trigger
+    # Color pallete button
     color_trigger_rect = pygame.Rect(1000, 760, 150, 30)
     pygame.draw.rect(screen, draw_color, color_trigger_rect, border_radius=8)
     pygame.draw.rect(screen, WHITE, color_trigger_rect, 2, border_radius=8)
@@ -264,46 +374,62 @@ def draw_ui(mx, my):
     pygame.draw.rect(screen, (0, 0, 0, 100), canvas_rect.inflate(14, 14), border_radius=12)
     pygame.draw.rect(screen, TEAL, canvas_rect.inflate(10, 10), 4, border_radius=10)
 
+
 def draw_color_picker():
-    """Renders the HSV color wheel popup directly above the trigger"""
+    # Requires a bit of math
     pygame.draw.rect(screen, (40, 40, 40), picker_rect, border_radius=15)
     pygame.draw.rect(screen, TEAL, picker_rect, 3, border_radius=15)
     
-    # Wheel
+    # Init the wheel
     wheel_pos = (picker_rect.x + 20, picker_rect.y + 20)
     screen.blit(wheel_surf, wheel_pos)
     
-    # Slider
+    # The value slider
     slider_rect = pygame.Rect(picker_rect.right - 40, picker_rect.y + 20, 20, 200)
     pygame.draw.rect(screen, (20, 20, 20), slider_rect)
+
+    # Draws the gradient white to black, iterates through each height, bottom to top
     for i in range(slider_rect.height):
-        v = 1.0 - (i / slider_rect.height)
-        pygame.draw.line(screen, (int(255*v), int(255*v), int(255*v)), (slider_rect.left, slider_rect.top + i), (slider_rect.right, slider_rect.top + i))
+        # The value is the ratio of the current height to the total, inverted
+        # since i/slider_rect.height is from 1 to 0, but we want 0 to 1
+        val = 1.0 - (i / slider_rect.height)
+        pygame.draw.line(screen, (int(255 * val), int(255 * val), int(255 * val)), (slider_rect.left, slider_rect.top + i), (slider_rect.right, slider_rect.top + i))
     
+    # the handle
     indicator_y = slider_rect.top + int((1.0 - value_slider) * slider_rect.height)
     pygame.draw.rect(screen, PINK, (slider_rect.left - 5, indicator_y - 2, slider_rect.width + 10, 4))
     
-    close_txt = font_small.render("CLICK OUTSIDE TO CLOSE", True, (150, 150, 150))
-    screen.blit(close_txt, (picker_rect.centerx - close_txt.get_width()//2, picker_rect.bottom - 25))
+    close_txt_surf = font_small.render("CLICK OUTSIDE TO CLOSE", True, (150, 150, 150))
+    screen.blit(close_txt_surf, (picker_rect.centerx - close_txt_surf.get_width() // 2, picker_rect.bottom - 25))
 
-# --- FILE OPERATIONS ---
+
+# saving and loading
+
 def save_file():
-    path = filedialog.asksaveasfilename(title="Save your Miku Art", defaultextension=".png", filetypes=[("PNG Image", "*.png")])
-    if path: pygame.image.save(canvas_surf, path)
+    save_path = filedialog.asksaveasfilename(title="Save your Miku Art", defaultextension=".png", filetypes=[("PNG Image", "*.png")])
+    if save_path: 
+        pygame.image.save(canvas_surf, save_path)
+
 
 def load_file():
-    path = filedialog.askopenfilename(title="Load a Bitmap", filetypes=[("Image files", "*.png *.jpg *.bmp")])
-    if path:
-        img = pygame.image.load(path)
-        canvas_surf.fill(WHITE) # Rubric: Ensure only one picture is visible at a time
-        img = pygame.transform.scale(img, (canvas_rect.width, canvas_rect.height))
-        canvas_surf.blit(img, (0, 0))
+    load_path = filedialog.askopenfilename(title="Load a Bitmap", filetypes=[("Image files", "*.png *.jpg *.bmp")])
+    if load_path:
+        loaded_img = pygame.image.load(load_path)
+        canvas_surf.fill(WHITE) 
+        scaled_img = pygame.transform.scale(loaded_img, (canvas_rect.width, canvas_rect.height))
+        canvas_surf.blit(scaled_img, (0, 0))
 
+# undo and redo
+# we have two lists, undo and redo list
+# when we draw, we take the current canvas layer and pushes it onto the undo list
+# when we undo, we pop the last surface, draws it, and puts that surface onto the redo list
+# when we redo, we pop the last surface on the redo list, draws it, and puts that onto the undo list
 def perform_undo():
     global canvas_surf
     if undo_list:
         redo_list.append(canvas_surf.copy())
         canvas_surf = undo_list.pop()
+
 
 def perform_redo():
     global canvas_surf
@@ -311,231 +437,350 @@ def perform_redo():
         undo_list.append(canvas_surf.copy())
         canvas_surf = redo_list.pop()
 
+# this function just checks every frame to change the draw color based on hsv into rgb
 def update_draw_color():
-    """Updates global draw_color based on stored HSV values"""
     global draw_color
     r, g, b = colorsys.hsv_to_rgb(current_hue, current_sat, value_slider)
-    draw_color = (int(r*255), int(g*255), int(b*255))
+    draw_color = (int(r * 255), int(g * 255), int(b * 255))
 
-# --- MAIN LOOP ---
+
+# RUNNING LOOP (YAY)
+
+# Clock to sync frame rate
 clock = pygame.time.Clock()
 running = True
-mx, my = 0, 0
-omx, omy = 0, 0
+
+# mouse pos variable inits
+mouse_x, mouse_y = 0, 0
+last_mouse_x, last_mouse_y = 0, 0
 start_x, start_y = 0, 0
 
 while running:
-    dt = clock.tick(60)
-    omx, omy = mx, my
-    mx, my = pygame.mouse.get_pos()
-    mb = pygame.mouse.get_pressed()
-    
-    rel_mx, rel_my = mx - canvas_rect.x, my - canvas_rect.y
-    rel_omx, rel_omy = omx - canvas_rect.x, omy - canvas_rect.y
 
+    # Gets the time since last frame
+    # this is used for cursor animation, since we need to run it at a constant rate
+    delta_time = clock.tick(60)
+    
+    # update mouse pos
+    last_mouse_x, last_mouse_y = mouse_x, mouse_y
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    mouse_buttons = pygame.mouse.get_pressed()
+    
+    # Canvas pos
+    rel_mouse_x, rel_mouse_y = mouse_x - canvas_rect.x, mouse_y - canvas_rect.y
+    rel_old_mouse_x, rel_old_mouse_y = last_mouse_x - canvas_rect.x, last_mouse_y - canvas_rect.y
+
+    # Event checking
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
         
+        # Mouse events
         if event.type == pygame.MOUSEBUTTONDOWN:
+
+            # collision detection
             if event.button == 1:
+                # color picking (this if statement stops you from accedentally clicking on other ui when you try to exit)
                 if picking_color:
-                    # Wheel coordinates relative to top-left of picker window
+                    # wheel coordinates relative to top-left of picker window
                     wheel_center = (picker_rect.x + 20 + color_wheel_radius, picker_rect.y + 20 + color_wheel_radius)
-                    dx, dy = mx - wheel_center[0], my - wheel_center[1]
-                    dist = (dx**2 + dy**2)**0.5
+                    # Convert global mouse pos to start from the center of the wheel
+                    diff_x, diff_y = mouse_x - wheel_center[0], mouse_y - wheel_center[1]
+                    # pythag
+                    dist_to_center = (diff_x**2 + diff_y**2)**0.5
                     
-                    if dist <= color_wheel_radius:
-                        # Grab base color from wheel and update global H/S
-                        raw_color = wheel_surf.get_at((int(mx - (picker_rect.x + 20)), int(my - (picker_rect.y + 20))))
-                        h, s, _ = colorsys.rgb_to_hsv(raw_color.r/255, raw_color.g/255, raw_color.b/255)
+                    # check if mouse is in bound of the wheel
+                    if dist_to_center <= color_wheel_radius:
+
+                        # grab base color from wheel and update global H/S
+                        raw_picked_color = wheel_surf.get_at((int(mouse_x - (picker_rect.x + 20)), int(mouse_y - (picker_rect.y + 20))))
+                        # note: we drop the v because that is going to get fed from the slider
+                        h, s, _ = colorsys.rgb_to_hsv(raw_picked_color.r / 255, raw_picked_color.g / 255, raw_picked_color.b / 255)
                         current_hue, current_sat = h, s
                         update_draw_color()
                     
+                    # value slider "collider rect"
                     slider_rect = pygame.Rect(picker_rect.right - 40, picker_rect.y + 20, 20, 200)
-                    if slider_rect.collidepoint(mx, my):
+                    if slider_rect.collidepoint(mouse_x, mouse_y):
                         dragging_slider = True
                     
-                    if not picker_rect.collidepoint(mx, my):
+                    if not picker_rect.collidepoint(mouse_x, mouse_y):
                         picking_color = False
                 else:
-                    # Trigger Color Wheel
-                    if pygame.Rect(1000, 760, 150, 30).collidepoint(mx, my):
+                    # if clicking on the trigger, then open the menu
+                    if pygame.Rect(1000, 760, 150, 30).collidepoint(mouse_x, mouse_y):
                         picking_color = True
                     
-                    # Top Buttons
-                    if pygame.Rect(WIDTH - 160, 25, 140, 40).collidepoint(mx, my): save_file()
-                    if pygame.Rect(WIDTH - 320, 25, 140, 40).collidepoint(mx, my): load_file()
-
-                    if not canvas_rect.collidepoint(mx, my):
-                        # Sidebar and Presets
+                    # save and load buttons 
+                    if pygame.Rect(WIDTH - 160, 25, 140, 40).collidepoint(mouse_x, mouse_y): 
+                        save_file()
+                    if pygame.Rect(WIDTH - 320, 25, 140, 40).collidepoint(mouse_x, mouse_y): 
+                        load_file()
+                    
+                    # if we are not drawing on the canvas
+                    if not canvas_rect.collidepoint(mouse_x, mouse_y):
+                        # sidebar
                         tools_list = ["pencil", "brush", "eraser", "spray", "line", "rect", "oval"]
-                        for i, t in enumerate(tools_list):
-                            if pygame.Rect(25, 110 + (i * 35), 140, 30).collidepoint(mx, my):
-                                tool = t
-                        if pygame.Rect(115, 355, 25, 25).collidepoint(mx, my): thickness = min(100, thickness + 1)
-                        if pygame.Rect(145, 355, 25, 25).collidepoint(mx, my): thickness = max(1, thickness - 1)
+
+                        for i, tool_name in enumerate(tools_list):
+                            if pygame.Rect(25, 110 + (i * 35), 140, 30).collidepoint(mouse_x, mouse_y):
+                                tool = tool_name
+                                
+                        if pygame.Rect(115, 355, 25, 25).collidepoint(mouse_x, mouse_y): 
+                            thickness = min(100, thickness + 1)
+                        if pygame.Rect(145, 355, 25, 25).collidepoint(mouse_x, mouse_y): 
+                            thickness = max(1, thickness - 1)
+                            
                         for i in range(5):
-                            if pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40).collidepoint(mx, my):
+                            if pygame.Rect(25 + (i%2 * 75), 495 + (i//2 * 45), 60, 40).collidepoint(mouse_x, mouse_y):
                                 tool = f"stamp_{i}"
-                        # Presets
-                        for i, c in enumerate(PRESETS):
-                            if pygame.Rect(200 + (i * 45), 760, 40, 30).collidepoint(mx, my):
-                                draw_color = c
-                                h, s, v = colorsys.rgb_to_hsv(c[0]/255, c[1]/255, c[2]/255)
+                                
+                        #pPresets
+                        for i, preset_color in enumerate(PRESETS):
+                            if pygame.Rect(200 + (i * 45), 760, 40, 30).collidepoint(mouse_x, mouse_y):
+                                draw_color = preset_color
+                                h, s, v = colorsys.rgb_to_hsv(preset_color[0] / 255, preset_color[1] / 255, preset_color[2] / 255)
                                 current_hue, current_sat, value_slider = h, s, v
                     else:
+                        # if we are drawing, then save the surface onto undo so we can go back to this state
                         undo_list.append(canvas_surf.copy())
-                        if len(undo_list) > 30: undo_list.pop(0)
+                        # clamp undo to save resources
+                        if len(undo_list) > 30: 
+                            undo_list.pop(0)
+                        # clear redo because that branch is now stale (like git)
                         redo_list.clear()
-                        start_x, start_y = rel_mx, rel_my
+                        # record the start position relative to the canvas
+                        start_x, start_y = rel_mouse_x, rel_mouse_y
 
+        # when the mouse button is lifted
         if event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 dragging_slider = False
+                
                 # Handle Shape Finalization
-                if tool in ["line", "rect", "oval"] and canvas_rect.collidepoint(mx, my) and not picking_color:
+                if tool in ["line", "rect", "oval"] and canvas_rect.collidepoint(mouse_x, mouse_y) and not picking_color:
                     if tool == "line":
-                        # MATH: Draw rotated polygon to keep thickness constant regardless of angle
-                        dx, dy = rel_mx - start_x, rel_my - start_y
-                        dist = math.hypot(dx, dy)
+                        # get deltas
+                        diff_x, diff_y = rel_mouse_x - start_x, rel_mouse_y - start_y
+                        # pythag
+                        dist = (diff_x**2 + diff_y**2)**0.5
+                        
+                        # Math to make sure we are making a line that is always consistenly in thickness no matter the angle
                         if dist > 0:
-                            px, py = -dy * (thickness / 2) / dist, dx * (thickness / 2) / dist
-                            pts = [(start_x+px, start_y+py), (start_x-px, start_y-py), (rel_mx-px, rel_my-py), (rel_mx+px, rel_my+py)]
-                            pygame.draw.polygon(canvas_surf, draw_color, pts)
+                            # calculate the distance the 4 points are from the actual start and end positions
+                            # we achive this by first taking the perpendicuar coords (x, y) → (-y, x)
+                            # then, we scale this using the ratio of the thickness/2 and our current sitance
+                            # mathmatically, our original distance cnacelles out, leaving us with thickness/2, which is what we want
+                            perp_x, perp_y = -diff_y * (thickness / 2) / dist, diff_x * (thickness / 2) / dist
+                            
+                            # define the 4 points of the polygon
+                            poly_points = [
+                                (start_x + perp_x, start_y + perp_y), 
+                                (start_x - perp_x, start_y - perp_y), 
+                                (rel_mouse_x - perp_x, rel_mouse_y - perp_y), 
+                                (rel_mouse_x + perp_x, rel_mouse_y + perp_y)
+                            ]
+                            # draws it
+                            pygame.draw.polygon(canvas_surf, draw_color, poly_points)
+                        
+                        # Draws circle caps, looks nicer
                         pygame.draw.circle(canvas_surf, draw_color, (start_x, start_y), thickness // 2)
-                        pygame.draw.circle(canvas_surf, draw_color, (rel_mx, rel_my), thickness // 2)
+                        pygame.draw.circle(canvas_surf, draw_color, (rel_mouse_x, rel_mouse_y), thickness // 2)
+                    
                     elif tool == "rect":
-                        r = pygame.Rect(start_x, start_y, rel_mx - start_x, rel_my - start_y)
-                        r.normalize()
-                        if filled: 
-                            pygame.draw.rect(canvas_surf, draw_color, r)
-                        else: 
-                            pygame.draw.rect(canvas_surf, draw_color, r, thickness)
-                    elif tool == "oval":
-                        r = pygame.Rect(start_x, start_y, rel_mx - start_x, rel_my - start_y)
-                        r.normalize()
-                        if r.width > thickness and r.height > thickness:
-                            if filled: 
-                                pygame.draw.ellipse(canvas_surf, draw_color, r)
-                            else: 
-                                pygame.draw.ellipse(canvas_surf, draw_color, r, thickness)
+                        shape_rect = pygame.Rect(start_x, start_y, rel_mouse_x - start_x, rel_mouse_y - start_y)
+                        # normalize to make sure we don;t have negative deltas
+                        shape_rect.normalize()
 
-        # --- UNIFIED KEYBOARD HANDLING (MOVED INSIDE EVENT LOOP) ---
+                        if filled: 
+                            pygame.draw.rect(canvas_surf, draw_color, shape_rect)
+                        else: 
+                            pygame.draw.rect(canvas_surf, draw_color, shape_rect, thickness)
+                            
+                    elif tool == "oval":
+                        shape_rect = pygame.Rect(start_x, start_y, rel_mouse_x - start_x, rel_mouse_y - start_y)
+                        shape_rect.normalize()
+                        if shape_rect.width > thickness and shape_rect.height > thickness:
+                            if filled: 
+                                pygame.draw.ellipse(canvas_surf, draw_color, shape_rect)
+                            else: 
+                                pygame.draw.ellipse(canvas_surf, draw_color, shape_rect, thickness)
+
+        # Shortcuts
         if event.type == pygame.KEYDOWN:
-            mods = pygame.key.get_mods()
-            if (mods & pygame.KMOD_CTRL):
+            # Music short cut
+            if event.key == pygame.K_p:
+                playing = not playing
+                if playing:
+                    print("play")
+                    pygame.mixer.music.unpause()
+                else:
+                    print("pause")
+                    pygame.mixer.music.pause()
+            # The get_mods() function returns a bitmask of the modifer keys (shift, ctl, alt, etc)
+            key_mods = pygame.key.get_mods()
+            # we then AND this with the ctrl key to get whether its pressed down
+            if (key_mods & pygame.KMOD_CTRL):
+                # undo and redo
                 if event.key == pygame.K_z:
-                    if (mods & pygame.KMOD_SHIFT): 
+                    if (key_mods & pygame.KMOD_SHIFT): 
                         perform_redo()
                     else: 
                         perform_undo()
-                if event.key == pygame.K_s: save_file()
-                if event.key == pygame.K_l: load_file()
-                if event.key == pygame.K_f: filled = not filled
+                
+                # save
+                if event.key == pygame.K_s: 
+                    save_file()
+                # load
+                if event.key == pygame.K_l: 
+                    load_file()
+                # filled shapes
+                if event.key == pygame.K_f: 
+                    filled = not filled
             
-            if event.key == pygame.K_UP: thickness = min(100, thickness + 1)
-            if event.key == pygame.K_DOWN: thickness = max(1, thickness - 1)
+            # change brush size
+            if event.key == pygame.K_UP: 
+                thickness = min(100, thickness + 1)
+            if event.key == pygame.K_DOWN: 
+                thickness = max(1, thickness - 1)
 
-    # Handle Draggable Slider
+    # update the color picker slider
     if picking_color and dragging_slider:
         slider_rect = pygame.Rect(picker_rect.right - 40, picker_rect.y + 20, 20, 200)
-        value_slider = 1.0 - ((my - slider_rect.top) / slider_rect.height)
+        # we only update the value slider y if we are dragging it
+        value_slider = 1.0 - ((mouse_y - slider_rect.top) / slider_rect.height)
         value_slider = max(0, min(1, value_slider))
         update_draw_color()
 
-    # Rendering
-    draw_ui(mx, my) # Passing mouse pos for hover effects
+    # rendering
+    draw_ui(mouse_x, mouse_y) 
     screen.blit(canvas_surf, (canvas_rect.x, canvas_rect.y))
+
 
     if picking_color:
         draw_color_picker()
-    elif canvas_rect.collidepoint(mx, my):
+    elif canvas_rect.collidepoint(mouse_x, mouse_y):
+
         if tool.startswith("stamp_"):
-            idx = int(tool.split("_")[1])
-            s_size = thickness * 5
-            ghost = pygame.transform.scale(master_stamps[idx], (int(s_size), int(s_size)))
-            ghost.set_alpha(150)
-            screen.blit(ghost, (mx - s_size//2, my - s_size//2))
+            stamp_idx = int(tool.split("_")[1])
+            stamp_size = thickness * 5
+            # blits ghost preview onto the screen
+            ghost_stamp = pygame.transform.scale(master_stamps[stamp_idx], (int(stamp_size), int(stamp_size)))
+            ghost_stamp.set_alpha(150)
+            screen.blit(ghost_stamp, (mouse_x - stamp_size // 2, mouse_y - stamp_size // 2))
+            
         elif tool == "brush":
-            pygame.draw.circle(screen, draw_color, (mx, my), thickness // 2, 1)
+            pygame.draw.circle(screen, draw_color, (mouse_x, mouse_y), thickness // 2, 1)
         elif tool == "eraser":
-            pygame.draw.circle(screen, WHITE, (mx, my), (thickness * 4) // 2, 1)
+            pygame.draw.circle(screen, WHITE, (mouse_x, mouse_y), (thickness * 4) // 2, 1)
         elif tool == "pencil":
-            pygame.draw.circle(screen, draw_color, (mx, my), 2, 1)
+            pygame.draw.circle(screen, draw_color, (mouse_x, mouse_y), 2, 1)
         elif tool in ["line", "rect", "oval", "spray"]:
-            pygame.draw.line(screen, BLACK, (mx-10, my), (mx+10, my), 1)
-            pygame.draw.line(screen, BLACK, (mx, my-10), (mx, my+10), 1)
+            pygame.draw.line(screen, BLACK, (mouse_x - 10, mouse_y), (mouse_x + 10, mouse_y), 1)
+            pygame.draw.line(screen, BLACK, (mouse_x, mouse_y - 10), (mouse_x, mouse_y + 10), 1)
     
-    # Active Drawing logic (Canvas persistence)
-    if mb[0] and canvas_rect.collidepoint(mx, my) and not picking_color:
+    # drawing
+    if mouse_buttons[0] and canvas_rect.collidepoint(mouse_x, mouse_y) and not picking_color:
         if tool == "pencil":
-            pygame.draw.line(canvas_surf, draw_color, (rel_omx, rel_omy), (rel_mx, rel_my), 1)
+            pygame.draw.line(canvas_surf, draw_color, (rel_old_mouse_x, rel_old_mouse_y), (rel_mouse_x, rel_mouse_y), 1)
+            
         elif tool in ["brush", "eraser"]:
-            col = draw_color if tool == "brush" else WHITE
-            thick = thickness if tool == "brush" else thickness * 4
-            dx, dy = rel_mx - rel_omx, rel_my - rel_omy
-            dist = math.hypot(dx, dy)
+            draw_col = draw_color
+            if tool == "eraser":
+                draw_col = WHITE
+                
+            draw_thick = thickness
+            if tool == "eraser":
+                draw_thick = thickness * 1.5
+                
+            diff_x, diff_y = rel_mouse_x - rel_old_mouse_x, rel_mouse_y - rel_old_mouse_y
+            dist = (diff_x**2 + diff_y**2)**0.5
+            
             if dist > 0:
-                px, py = -dy * (thick / 2) / dist, dx * (thick / 2) / dist
-                pts = [(rel_omx+px, rel_omy+py), (rel_omx-px, rel_omy-py), (rel_mx-px, rel_my-py), (rel_mx+px, rel_my+py)]
-                pygame.draw.polygon(canvas_surf, col, pts)
-            pygame.draw.circle(canvas_surf, col, (rel_mx, rel_my), thick // 2)
+                perp_x, perp_y = -diff_y * (draw_thick / 2) / dist, diff_x * (draw_thick / 2) / dist
+                bridge_points = [
+                    (rel_old_mouse_x + perp_x, rel_old_mouse_y + perp_y), 
+                    (rel_old_mouse_x - perp_x, rel_old_mouse_y - perp_y), 
+                    (rel_mouse_x - perp_x, rel_mouse_y - perp_y), 
+                    (rel_mouse_x + perp_x, rel_mouse_y + perp_y)
+                ]
+                pygame.draw.polygon(canvas_surf, draw_col, bridge_points)
+            pygame.draw.circle(canvas_surf, draw_col, (rel_mouse_x, rel_mouse_y), draw_thick // 2)
+            
         elif tool == "spray":
             for _ in range(thickness // 2 + 5):
-                rx, ry = random.randint(-thickness, thickness), random.randint(-thickness, thickness)
-                if rx**2 + ry**2 <= thickness**2:
-                    if 0 <= rel_mx + rx < canvas_rect.width and 0 <= rel_my + ry < canvas_rect.height:
-                        canvas_surf.set_at((rel_mx + rx, rel_my + ry), draw_color)
+                # choose random point
+                rand_x, rand_y = random.randint(-thickness, thickness), random.randint(-thickness, thickness)
+                # check if its in bounds
+                if rand_x**2 + rand_y**2 <= thickness**2:
+                    # if the random position is inside the canvas
+                    if 0 <= rel_mouse_x + rand_x < canvas_rect.width and 0 <= rel_mouse_y + rand_y < canvas_rect.height:
+                        canvas_surf.set_at((rel_mouse_x + rand_x, rel_mouse_y + rand_y), draw_color)
+        
         elif tool.startswith("stamp_"):
-            idx = int(tool.split("_")[1])
-            s_size = thickness * 5
-            s_img = pygame.transform.scale(master_stamps[idx], (int(s_size), int(s_size)))
-            canvas_surf.blit(s_img, (rel_mx - s_size//2, rel_my - s_size//2))
+            stamp_idx = int(tool.split("_")[1])
+            stamp_size = thickness * 5
+            stamp_img = pygame.transform.scale(master_stamps[stamp_idx], (int(stamp_size), int(stamp_size)))
+            canvas_surf.blit(stamp_img, (rel_mouse_x - stamp_size // 2, rel_mouse_y - stamp_size // 2))
+            
         elif tool in ["line", "rect", "oval"]:
-            # Screen Preview (Same logic as provided)
+            # these are screen previews, because how these tools work, they can only be finalized when you lift the mouse
             if tool == "line":
-                sx, sy = start_x + canvas_rect.x, start_y + canvas_rect.y
-                dx, dy = mx - sx, my - sy
-                dist = math.hypot(dx, dy)
+                start_scr_x, start_scr_y = start_x + canvas_rect.x, start_y + canvas_rect.y
+                diff_x, diff_y = mouse_x - start_scr_x, mouse_y - start_scr_y
+                dist = (diff_x**2 + diff_y**2)**0.5
+                
                 if dist > 0:
-                    px, py = -dy * (thickness / 2) / dist, dx * (thickness / 2) / dist
-                    pts = [(sx+px, sy+py), (sx-px, sy-py), (mx-px, my-py), (mx+px, my+py)]
-                    pygame.draw.polygon(screen, draw_color, pts)
-                pygame.draw.circle(screen, draw_color, (sx, sy), thickness // 2); pygame.draw.circle(screen, draw_color, (mx, my), thickness // 2)
+                    perp_x, perp_y = -diff_y * (thickness / 2) / dist, diff_x * (thickness / 2) / dist
+                    poly_points = [
+                        (start_scr_x + perp_x, start_scr_y + perp_y), 
+                        (start_scr_x - perp_x, start_scr_y - perp_y), 
+                        (mouse_x - perp_x, mouse_y - perp_y), 
+                        (mouse_x + perp_x, mouse_y + perp_y)
+                    ]
+                    pygame.draw.polygon(screen, draw_color, poly_points)
+                pygame.draw.circle(screen, draw_color, (start_scr_x, start_scr_y), thickness // 2)
+                pygame.draw.circle(screen, draw_color, (mouse_x, mouse_y), thickness // 2)
+                
             elif tool == "rect":
-                r = pygame.Rect(start_x + canvas_rect.x, start_y + canvas_rect.y, mx - (start_x + canvas_rect.x), my - (start_y + canvas_rect.y))
-                r.normalize()
-                if filled: pygame.draw.rect(screen, draw_color, r)
-                else: pygame.draw.rect(screen, draw_color, r, thickness)
+                preview_rect = pygame.Rect(start_x + canvas_rect.x, start_y + canvas_rect.y, mouse_x - (start_x + canvas_rect.x), mouse_y - (start_y + canvas_rect.y))
+                preview_rect.normalize()
+                if filled: 
+                    pygame.draw.rect(screen, draw_color, preview_rect)
+                else: 
+                    pygame.draw.rect(screen, draw_color, preview_rect, thickness)
+                    
             elif tool == "oval":
-                r = pygame.Rect(start_x + canvas_rect.x, start_y + canvas_rect.y, mx - (start_x + canvas_rect.x), my - (start_y + canvas_rect.y))
-                r.normalize()
-                if r.width > thickness and r.height > thickness:
-                    if filled: pygame.draw.ellipse(screen, draw_color, r)
-                    else: pygame.draw.ellipse(screen, draw_color, r, thickness)
+                preview_rect = pygame.Rect(start_x + canvas_rect.x, start_y + canvas_rect.y, mouse_x - (start_x + canvas_rect.x), mouse_y - (start_y + canvas_rect.y))
+                preview_rect.normalize()
+                if preview_rect.width > thickness and preview_rect.height > thickness:
+                    if filled: 
+                        pygame.draw.ellipse(screen, draw_color, preview_rect)
+                    else: 
+                        pygame.draw.ellipse(screen, draw_color, preview_rect, thickness)
 
-    # --- ANIMATED CURSOR LOGIC (INJECTED AT END) ---
+
     pygame.mouse.set_visible(False)
-    mode = "Normal"
-    if canvas_rect.collidepoint(mx, my): 
-        mode = "Handwriting"
-    elif (mx < 200 or my < 100 or my > 750 or mx > 1150): 
-        mode = "Link"
+    current_mode = "Normal"
     
-    cur_timer += dt
-    if cur_timer > cur_speed:
-        cur_timer = 0
-        if cursor_dict[mode]: 
-            cur_frame = (cur_frame + 1) % len(cursor_dict[mode])
+    if canvas_rect.collidepoint(mouse_x, mouse_y): 
+        current_mode = "Handwriting"
+    elif (mouse_x < 200 or mouse_y < 100 or mouse_y > 750 or mouse_x > 1150): 
+        current_mode = "Link"
     
-    if cursor_dict[mode]:
-        screen.blit(cursor_dict[mode][cur_frame % len(cursor_dict[mode])], (mx, my))
+    cursor_timer += delta_time
+    if cursor_timer > cursor_speed:
+        cursor_timer = 0
+        if cursor_dict[current_mode]: 
+            cursor_frame = (cursor_frame + 1) % len(cursor_dict[current_mode])
+    
+    if cursor_dict[current_mode]:
+        screen.blit(cursor_dict[current_mode][cursor_frame % len(cursor_dict[current_mode])], (mouse_x, mouse_y))
     else: 
-        pygame.draw.circle(screen, BLACK, (mx, my), 2)
+        pygame.draw.circle(screen, BLACK, (mouse_x, mouse_y), 2)
 
-    coord_txt = font_mono.render(f"Pos: {rel_mx}, {rel_my} | Tool: {tool} | Size: {thickness} | Ctrl+Z: Undo", True, WHITE)
-    screen.blit(coord_txt, (200, 740))
+    coord_info_surf = font_mono.render(f"Pos: {rel_mouse_x}, {rel_mouse_y} | Tool: {tool} | Size: {thickness} | Ctrl+Z: Undo", True, WHITE)
+    screen.blit(coord_info_surf, (200, 740))
     pygame.display.flip()
 
 pygame.quit()
