@@ -1,0 +1,6 @@
+John,7
+Ali,2
+Hassan,5
+Tom,1
+Kate,3
+Peter,14
