@@ -15,32 +15,26 @@ MIN = int(input("Enter the points FROM: "))
 MAX = int(input("Enter the points TO: "))
 print("-" * 30)
 
-# Load data into a list of lists
-ATP = [i.split(",") for i in ATPFile.readlines()]
+# Load data into a list of lists, stripping newlines and empty lines
+ATP = [i.strip().split(",") for i in ATPFile.readlines() if i.strip()]
 
-minIndex = 0
-maxIndex = 0
+filtered_players = []
 
-# Find the starting and ending indices based on points
+# Find players within the point range
 for P in range(len(ATP)):
-    if int(ATP[P][-1]) < MAX:
-        maxIndex = P + 1
-        break
-
-for P in range(len(ATP)):
-    if int(ATP[P][-1]) < MIN:
-        minIndex = P
-        break
+    points = int(ATP[P][-1])
+    if MIN <= points <= MAX:
+        filtered_players.append(ATP[P])
 
 # Output total count of players in range
-print(f"{minIndex - maxIndex + 1} players total")
+print(f"{len(filtered_players)} players total")
 
 # Create output file with name based on point range
 minmaxFile = open(f"./AdvancedTopics/{MIN}to{MAX}.txt", "w")
 
-# Write ranking, last name, and points to the file
-for j in range(maxIndex, minIndex + 1):
-    minmaxFile.write(f"{ATP[j-1][0]},{ATP[j-1][2]},{ATP[j-1][-1]}")
+# Write ranking, last name, and points to the file with proper spacing and newlines
+for player in filtered_players:
+    minmaxFile.write(f"{player[0].strip()}, {player[2].strip()}, {player[-1].strip()}\n")
 
 minmaxFile.close()
 ATPFile.close()
@@ -52,14 +46,14 @@ ATPFile.close()
 portfolioFile = open("./AdvancedTopics/Data/myportfolio.txt", "r")
 stocksFile = open("./AdvancedTopics/Data/stocks.txt", "r")
 
-# Create dictionary for quick lookup from stocks.txt
+# Create dictionary for quick lookup from stocks.txt, ignoring blank lines
 # Format: { 'CODE': ['Name', 'Code', 'Price'] }
-stocks = {s.split('\t')[1]: s.split('\t') for s in stocksFile.readlines()}
-portfolio = [p.split('\t') for p in portfolioFile.readlines()]
+stocks = {s.strip().split('\t')[1]: s.strip().split('\t') for s in stocksFile.readlines() if s.strip()}
+portfolio = [p.strip().split('\t') for p in portfolioFile.readlines() if p.strip()]
 
 print("\nPersonal Stock Portfolio")
-print("-" * 40)
-print(f"{'Company Name':<18}{'Price':<11}{'Value'}")
+print("-" * 50)
+print(f"{'Company Name':<30}{'Price':<11}{'Value'}")
 
 totalPortfolio = 0.0
 
@@ -75,8 +69,8 @@ for P in portfolio:
         totalPortfolio += value
         
         # Display formatted table rows
-        print(f"{name:18}{price:<11.2f}{value:<11.2f}")
-        print("-" * 40)
+        print(f"{name:30}{price:<11.2f}{value:<11.2f}")
+        print("-" * 50)
 
 # Display total value of the entire portfolio
 print(f"Total Portfolio Value: ${totalPortfolio:.2f}")
@@ -93,7 +87,8 @@ lebronFile = open("./AdvancedTopics/Data/lebron.txt", "r")
 # Flatten all comma-separated points into a single integer list
 all_points = []
 for line in lebronFile.readlines():
-    quarters = line.strip().split(",")
+    # Replace spaces with commas to handle missing commas, then split
+    quarters = line.strip().replace(" ", ",").split(",")
     for q in quarters:
         if q != "":
             all_points.append(int(q))

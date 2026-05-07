@@ -1,4 +1,4 @@
-6,Nishikori,4490
-7,Tsonga,3400
-8,Ferrer,3190
-9,Berdych,3120
+6, Nishikori, 4490
+7, Tsonga, 3400
+8, Ferrer, 3190
+9, Berdych, 3120
